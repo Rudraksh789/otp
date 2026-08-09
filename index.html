@@ -504,9 +504,8 @@
     *{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
   }
 </style>
-<!-- Firebase: lets this page send/verify real SMS OTPs. No install needed, just these two script tags. -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<!-- EmailJS: lets this page send real emails straight from the browser. Free, no card, no backend. -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 </head>
 <body>
 
@@ -520,34 +519,30 @@
       </button>
     </div>
 
-    <!-- ================= SCREEN 1: PHONE NUMBER ================= -->
+    <!-- ================= SCREEN 1: EMAIL ================= -->
     <section class="screen active" id="screenPhone">
       <div class="icon-badge">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
       </div>
-      <h1>Log in with your phone</h1>
-      <p class="subtitle">We'll text a 4-digit code to confirm it's really you. Standard message rates apply.</p>
+      <h1>Log in with your email</h1>
+      <p class="subtitle">We'll email a 6-digit code to confirm it's really you.</p>
 
       <div class="field-group">
-        <label class="field-label" for="phoneInput">Phone number</label>
+        <label class="field-label" for="phoneInput">Email address</label>
         <div class="phone-input-row">
-          <span class="country-code">🇮🇳 +91</span>
-          <input id="phoneInput" type="tel" inputmode="numeric" placeholder="98765 43210" maxlength="11" autocomplete="tel-national">
+          <input id="phoneInput" type="email" placeholder="you@example.com" autocomplete="email">
         </div>
         <div class="error-text" id="phoneError"></div>
       </div>
 
-      <!-- Firebase needs an invisible "are you a robot" check to send real SMS. It's invisible, nothing to click. -->
-      <div id="recaptcha-container"></div>
-
       <button class="btn-primary" id="sendCodeBtn" type="button">Send code</button>
-      <p class="fine-print">By continuing you agree to receive a one-time verification code by SMS.</p>
+      <p class="fine-print">By continuing you agree to receive a one-time verification code by email.</p>
     </section>
 
     <!-- ================= SCREEN 2: OTP VERIFY ================= -->
     <section class="screen" id="screenOtp">
-      <h1>Verify your number</h1>
-      <p class="subtitle otp-subtitle">Enter the 6-digit code we sent to <b id="maskedPhone">+91 98765 •••10</b></p>
+      <h1>Verify your email</h1>
+      <p class="subtitle otp-subtitle">Enter the 6-digit code we sent to <b id="maskedPhone">y***@example.com</b></p>
 
       <div class="orbit-wrap" id="orbitWrap">
         <svg class="orbit-svg" viewBox="0 0 220 150">
@@ -614,26 +609,27 @@
   "use strict";
 
   /* =========================================================================
-     PASTE YOUR FIREBASE CONFIG HERE.
-     You get this block from: Firebase console → ⚙️ Project settings →
-     "Your apps" → the web app (</>) you registered. It looks like the
-     example below but with your own real values. Just replace the whole
-     object, don't rename the variable.
+     PASTE YOUR EMAILJS DETAILS HERE.
+     You get these from emailjs.com after: 1) adding an email service (e.g.
+     connect your Gmail), 2) creating a template with {{to_email}} and
+     {{passcode}} variables in it, 3) Account → General → Public Key.
   ========================================================================= */
-  const firebaseConfig = {
-  apiKey: "AIzaSyDQHCPapcQWnhd9F5CxqjMYFlGYEBU-dxQ",
-  authDomain: "otp-test-1dfdb.firebaseapp.com",
-  projectId: "otp-test-1dfdb",
-  storageBucket: "otp-test-1dfdb.firebasestorage.app",
-  messagingSenderId: "1060140984642",
-  appId: "1:1060140984642:web:a138b35da06a1c839840db",
-  measurementId: "G-VD8G37RLFM"
-};
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
+  const EMAILJS_PUBLIC_KEY  = "mzbLNMx3rZR_JjoOp";
+  const EMAILJS_SERVICE_ID  = "service_uiazmlu";
+  const EMAILJS_TEMPLATE_ID = "template_6my7s5m";
+  emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
 
-  // Holds the in-progress phone verification returned by Firebase.
-  let confirmationResult = null;
+  // The code we generated and emailed out, so we can check what the person types back in.
+  let sentCode = null;
+
+  function genCode(){
+    return String(Math.floor(100000 + Math.random()*900000)); // 6 digits
+  }
+
+  function expiryTimeString(){
+    const d = new Date(Date.now() + 15*60*1000); // 15 minutes from now
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
 
   /* ---------------- sound engine (synthesized, no audio files, no music) ---------------- */
   let actx = null;
@@ -700,50 +696,46 @@
   const maskedPhone = document.getElementById("maskedPhone");
 
   phoneInput.addEventListener("input", ()=>{
-    let digits = phoneInput.value.replace(/\D/g,"").slice(0,10);
-    let out = digits;
-    if(digits.length > 5) out = `${digits.slice(0,5)} ${digits.slice(5)}`;
-    phoneInput.value = out;
     phoneError.textContent = "";
   });
 
-  // Invisible "prove you're not a robot" check Firebase needs before it will send an SMS.
-  // It never shows a visible box unless Google gets suspicious.
-  let recaptchaVerifier = new firebase.auth.RecaptchaVerifier("recaptcha-container", {
-    size: "invisible"
-  });
+  function maskEmail(email){
+    const [user, domain] = email.split("@");
+    const shown = user.slice(0, Math.min(2, user.length));
+    return `${shown}${"*".repeat(Math.max(1, user.length - shown.length))}@${domain}`;
+  }
 
   sendCodeBtn.addEventListener("click", ()=>{
-    const digits = phoneInput.value.replace(/\D/g,"");
-    if(digits.length !== 10){
-      phoneError.textContent = "Enter a valid 10-digit phone number.";
+    const email = phoneInput.value.trim();
+    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if(!validEmail){
+      phoneError.textContent = "Enter a valid email address.";
       tone(220,0.18,{type:"sawtooth",gain:0.04});
       phoneInput.focus();
       return;
     }
-    const fullNumber = "+91" + digits;
     sendCodeBtn.disabled = true;
     sendCodeBtn.textContent = "Sending…";
+    sentCode = genCode();
 
-    auth.signInWithPhoneNumber(fullNumber, recaptchaVerifier)
-      .then((result)=>{
-        confirmationResult = result;
+    emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: email,
+      passcode: sentCode,
+      time: expiryTimeString()
+    })
+      .then(()=>{
         sendCodeBtn.disabled = false;
         sendCodeBtn.textContent = "Send code";
         sounds.send();
-        maskedPhone.textContent = `+91 ${digits.slice(0,5)} •••${digits.slice(8)}`;
+        maskedPhone.textContent = maskEmail(email);
         startOtpFlow();
       })
       .catch((err)=>{
         console.error(err);
         sendCodeBtn.disabled = false;
         sendCodeBtn.textContent = "Send code";
-        phoneError.textContent = "Couldn't send the code. " + (err.message || "Try again.");
+        phoneError.textContent = "Couldn't send the code. Check your EmailJS setup and try again.";
         tone(220,0.18,{type:"sawtooth",gain:0.04});
-        // reset the invisible captcha so the next attempt gets a fresh token
-        recaptchaVerifier.render().then((widgetId)=>{
-          if(window.grecaptcha) window.grecaptcha.reset(widgetId);
-        });
       });
   });
 
@@ -800,12 +792,15 @@
   }
 
   resendBtn.addEventListener("click", ()=>{
-    const digits = phoneInput.value.replace(/\D/g,"");
-    const fullNumber = "+91" + digits;
+    const email = phoneInput.value.trim();
     resendBtn.disabled = true;
-    auth.signInWithPhoneNumber(fullNumber, recaptchaVerifier)
-      .then((result)=>{
-        confirmationResult = result;
+    sentCode = genCode();
+    emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: email,
+      passcode: sentCode,
+      time: expiryTimeString()
+    })
+      .then(()=>{
         sounds.send();
         smsCard.classList.remove("show");
         setTimeout(()=>{ smsCard.classList.add("show"); sounds.smsArrive(); }, 900);
@@ -898,40 +893,37 @@
   }
 
   function finishVerify(){
-    // Ask Firebase whether this is the real code it texted to the phone.
-    confirmationResult.confirm(currentValue())
-      .then(()=>{
-        boxes.forEach(b=> b.classList.add("ok"));
-        verifyStatus.textContent = "Verified";
-        verifyStatus.classList.add("ok");
-        sounds.success();
-        setTimeout(()=>{
-          showScreen("success");
-          triggerSuccessAnim();
-        }, 850);
-      })
-      .catch((err)=>{
-        console.error(err);
-        boxes.forEach(b=> b.classList.add("bad"));
-        verifyStatus.textContent = "That code didn't match. Try again.";
-        verifyStatus.classList.add("bad");
-        sounds.error();
-        otpBoxesWrap.classList.add("shake");
-        setTimeout(()=>{
-          otpBoxesWrap.classList.remove("shake");
-          boxes.forEach((b,i)=>{
-            b.classList.remove("ok","bad","filled");
-            b.style.setProperty("--slot", i);
-          });
-          inputs.forEach(i=> i.value="");
-          otpBoxesWrap.dataset.layout = "row";
-          orbitWrap.classList.remove("spinning");
-          verifyStatus.textContent = "";
-          verifyStatus.className = "verify-status";
-          verifying = false;
-          inputs[0].focus();
-        }, 1300);
-      });
+    const correct = currentValue() === sentCode;
+    if(correct){
+      boxes.forEach(b=> b.classList.add("ok"));
+      verifyStatus.textContent = "Verified";
+      verifyStatus.classList.add("ok");
+      sounds.success();
+      setTimeout(()=>{
+        showScreen("success");
+        triggerSuccessAnim();
+      }, 850);
+    } else {
+      boxes.forEach(b=> b.classList.add("bad"));
+      verifyStatus.textContent = "That code didn't match. Try again.";
+      verifyStatus.classList.add("bad");
+      sounds.error();
+      otpBoxesWrap.classList.add("shake");
+      setTimeout(()=>{
+        otpBoxesWrap.classList.remove("shake");
+        boxes.forEach((b,i)=>{
+          b.classList.remove("ok","bad","filled");
+          b.style.setProperty("--slot", i);
+        });
+        inputs.forEach(i=> i.value="");
+        otpBoxesWrap.dataset.layout = "row";
+        orbitWrap.classList.remove("spinning");
+        verifyStatus.textContent = "";
+        verifyStatus.className = "verify-status";
+        verifying = false;
+        inputs[0].focus();
+      }, 1300);
+    }
   }
 
   /* ---------------- screen 3: success ---------------- */
