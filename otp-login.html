@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verify your number</title>
+<style>
+  :root{
+    --bg:#0b0c10;
+    --card:#15161c;
+    --surface:#1b1c23;
+    --surface-hi:#242530;
+    --border: rgba(255,255,255,.09);
+    --border-soft: rgba(255,255,255,.06);
+    --text:#f2f3f5;
+    --text-dim:#8a8c93;
+    --text-faint:#5a5c63;
+    --ice:#dceaff;
+    --ice-glow: rgba(220,234,255,.35);
+    --ok:#2ee6a8;
+    --ok-dim: rgba(46,230,168,.14);
+    --bad:#ff4d5a;
+    --bad-dim: rgba(255,77,90,.14);
+    --radius-card:28px;
+    --radius-box:16px;
+  }
+
+  *{ box-sizing:border-box; }
+
+  body{
+    margin:0;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:
+      radial-gradient(ellipse 600px 400px at 50% 0%, rgba(255,255,255,.05), transparent 60%),
+      var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);
+    padding:32px 16px;
+  }
+
+  .phone-frame{
+    width:100%;
+    max-width:380px;
+  }
+
+  .card{
+    position:relative;
+    background:linear-gradient(180deg,var(--card),#121218);
+    border:1px solid var(--border);
+    border-radius:var(--radius-card);
+    padding:36px 26px 30px;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.02) inset;
+    overflow:hidden;
+    min-height:480px;
+    display:flex;
+    flex-direction:column;
+  }
+
+  .card::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:radial-gradient(400px 200px at 50% -10%, rgba(220,234,255,.06), transparent 70%);
+    pointer-events:none;
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    display:flex;
+    align-items:center;
+    min-height:20px;
+    margin-bottom:6px;
+  }
+  .back-btn{
+    background:none;
+    border:none;
+    color:var(--text-dim);
+    display:flex;
+    align-items:center;
+    gap:4px;
+    font-size:13px;
+    cursor:pointer;
+    padding:6px 8px 6px 0;
+    margin-left:-8px;
+    border-radius:8px;
+    transition:color .15s;
+    visibility:hidden;
+  }
+  .back-btn.show{ visibility:visible; }
+  .back-btn:hover{ color:var(--text); }
+  .back-btn:focus-visible{ outline:2px solid var(--ice); outline-offset:2px; }
+  .back-btn svg{ width:16px; height:16px; }
+
+  /* ---------- generic screen ---------- */
+  .screen{
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+    flex:1;
+    animation:fadeUp .45s cubic-bezier(.2,.8,.2,1) both;
+  }
+  .screen.active{ display:flex; }
+
+  @keyframes fadeUp{
+    from{ opacity:0; transform:translateY(10px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+
+  .icon-badge{
+    width:52px; height:52px;
+    border-radius:16px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    margin-bottom:20px;
+    color:var(--ice);
+  }
+  .icon-badge svg{ width:24px; height:24px; }
+
+  h1{
+    font-size:21px;
+    font-weight:650;
+    letter-spacing:-.01em;
+    margin:0 0 8px;
+  }
+  .subtitle{
+    font-size:14px;
+    color:var(--text-dim);
+    line-height:1.5;
+    margin:0 0 28px;
+    max-width:280px;
+  }
+  .subtitle b, .subtitle strong{ color:var(--text); font-weight:600; }
+
+  /* ---------- phone number field ---------- */
+  .field-group{ width:100%; text-align:left; margin-bottom:22px; }
+  .field-label{
+    display:block;
+    font-size:12px;
+    color:var(--text-faint);
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    margin-bottom:8px;
+  }
+  .phone-input-row{
+    display:flex;
+    align-items:stretch;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-box);
+    overflow:hidden;
+    transition:border-color .2s, box-shadow .2s;
+  }
+  .phone-input-row:focus-within{
+    border-color:rgba(220,234,255,.5);
+    box-shadow:0 0 0 4px var(--ice-glow);
+  }
+  .country-code{
+    display:flex; align-items:center; gap:6px;
+    padding:0 12px;
+    font-size:15px;
+    color:var(--text);
+    border-right:1px solid var(--border);
+    white-space:nowrap;
+  }
+  .phone-input-row input{
+    flex:1;
+    min-width:0;
+    background:none;
+    border:none;
+    outline:none;
+    color:var(--text);
+    font-size:16px;
+    padding:14px 14px;
+    font-family:inherit;
+    letter-spacing:.02em;
+  }
+  .phone-input-row input::placeholder{ color:var(--text-faint); }
+
+  .error-text{
+    font-size:12.5px;
+    color:var(--bad);
+    margin-top:8px;
+    min-height:16px;
+    text-align:left;
+  }
+
+  /* ---------- primary / continue buttons ---------- */
+  .btn-primary{
+    width:100%;
+    border:none;
+    border-radius:14px;
+    padding:15px 18px;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+    background:#f2f3f5;
+    color:#0b0c10;
+    transition:transform .15s, filter .15s, background .2s;
+    font-family:inherit;
+  }
+  .btn-primary:hover{ filter:brightness(1.05); }
+  .btn-primary:active{ transform:scale(.98); }
+  .btn-primary:focus-visible{ outline:2px solid var(--ice); outline-offset:3px; }
+  .btn-primary:disabled{ opacity:.45; cursor:not-allowed; }
+  .btn-primary.success{ background:var(--ok); color:#04241a; }
+
+  .fine-print{
+    font-size:11.5px;
+    color:var(--text-faint);
+    margin-top:16px;
+    line-height:1.5;
+    max-width:260px;
+  }
+
+  /* ---------- OTP screen ---------- */
+  .otp-subtitle{ margin-bottom:34px; }
+
+  .orbit-wrap{
+    position:relative;
+    width:290px;
+    height:150px;
+    margin:0 auto 8px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .orbit-svg{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    opacity:0;
+    transition:opacity .4s ease;
+    pointer-events:none;
+  }
+  .orbit-wrap.spinning .orbit-svg{ opacity:1; }
+  .orbit-path{
+    stroke:var(--border);
+    stroke-width:1.5;
+    stroke-dasharray:2 8;
+    fill:none;
+  }
+  .orbit-hub{
+    fill:var(--text-faint);
+    opacity:0;
+    transition:opacity .3s ease .2s;
+  }
+  .orbit-wrap.spinning .orbit-hub{ opacity:1; }
+
+  .otp-boxes{
+    position:relative;
+    width:100%;
+    height:100%;
+  }
+
+  .otp-box{
+    position:absolute;
+    top:50%; left:50%;
+    width:42px; height:56px;
+    margin:-28px 0 0 -21px;
+    border-radius:var(--radius-box);
+    background:var(--surface);
+    border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    font-size:22px;
+    font-weight:600;
+    color:var(--text);
+    transition:transform .55s cubic-bezier(.34,1.15,.4,1), background .35s, border-color .35s, box-shadow .35s;
+    cursor:text;
+  }
+  .otp-box input{
+    position:absolute;
+    inset:0;
+    width:100%; height:100%;
+    background:none;
+    border:none;
+    outline:none;
+    text-align:center;
+    font-size:22px;
+    font-weight:600;
+    color:var(--text);
+    font-family:inherit;
+    caret-color:var(--ice);
+  }
+  .otp-box.filled{ background:var(--surface-hi); }
+  .otp-box.focus-ring{
+    border-color:rgba(220,234,255,.6);
+    box-shadow:0 0 0 4px var(--ice-glow);
+  }
+  .otp-box.ok{ background:var(--ok-dim); border-color:var(--ok); color:var(--ok); }
+  .otp-box.ok input{ color:var(--ok); }
+  .otp-box.bad{ background:var(--bad-dim); border-color:var(--bad); color:var(--bad); }
+  .otp-box.bad input{ color:var(--bad); }
+
+  /* row layout: 6 boxes in a horizontal line */
+  .otp-boxes[data-layout="row"] .otp-box:nth-child(1){ transform:translate(-125px,0); }
+  .otp-boxes[data-layout="row"] .otp-box:nth-child(2){ transform:translate(-75px,0); }
+  .otp-boxes[data-layout="row"] .otp-box:nth-child(3){ transform:translate(-25px,0); }
+  .otp-boxes[data-layout="row"] .otp-box:nth-child(4){ transform:translate(25px,0); }
+  .otp-boxes[data-layout="row"] .otp-box:nth-child(5){ transform:translate(75px,0); }
+  .otp-boxes[data-layout="row"] .otp-box:nth-child(6){ transform:translate(125px,0); }
+
+  /* orbit layout: 6 positions around a circle, rotated by --rot steps of 60deg */
+  .otp-boxes[data-layout="orbit"] .otp-box{
+    --a: calc(var(--slot) * 60deg);
+  }
+  .otp-boxes[data-layout="orbit"] .otp-box{
+    transform:
+      rotate(var(--a))
+      translate(0, -62px)
+      rotate(calc(-1 * var(--a)));
+  }
+
+  .shake{ animation:shakeX .42s; }
+  @keyframes shakeX{
+    10%,90%{ transform:translateX(-2px); }
+    20%,80%{ transform:translateX(4px); }
+    30%,50%,70%{ transform:translateX(-8px); }
+    40%,60%{ transform:translateX(8px); }
+  }
+
+  .verify-status{
+    font-size:13px;
+    color:var(--text-faint);
+    height:18px;
+    margin:14px 0 22px;
+    transition:color .3s;
+  }
+  .verify-status.ok{ color:var(--ok); }
+  .verify-status.bad{ color:var(--bad); }
+
+  /* ---------- SMS message card ---------- */
+  .sms-card{
+    width:100%;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:12px 14px;
+    margin-bottom:14px;
+    opacity:0;
+    transform:translateY(8px);
+    transition:opacity .4s ease, transform .4s ease;
+    text-align:left;
+  }
+  .sms-card.show{ opacity:1; transform:translateY(0); }
+  .sms-icon{
+    width:36px; height:36px;
+    border-radius:50%;
+    background:var(--ice);
+    color:#0b0c10;
+    flex:none;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .sms-icon svg{ width:17px; height:17px; }
+  .sms-body{ flex:1; min-width:0; }
+  .sms-label{
+    font-size:10.5px;
+    letter-spacing:.07em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    margin-bottom:2px;
+  }
+  .sms-text{ font-size:13.5px; color:var(--text); }
+  .sms-text b{ font-weight:700; }
+  .sms-fill-btn{
+    flex:none;
+    background:#f2f3f5;
+    color:#0b0c10;
+    border:none;
+    border-radius:20px;
+    padding:8px 16px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    font-family:inherit;
+    transition:transform .15s, filter .15s;
+  }
+  .sms-fill-btn:hover{ filter:brightness(1.05); }
+  .sms-fill-btn:active{ transform:scale(.95); }
+  .sms-fill-btn:focus-visible{ outline:2px solid var(--ice); outline-offset:2px; }
+
+  .caption{
+    font-size:12.5px;
+    color:var(--text-faint);
+    margin-bottom:auto;
+    padding-bottom:16px;
+  }
+
+  .resend-row{
+    font-size:13px;
+    color:var(--text-faint);
+    margin-top:8px;
+  }
+  .resend-row button{
+    background:none;
+    border:none;
+    color:var(--ice);
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    padding:0;
+    font-family:inherit;
+  }
+  .resend-row button:disabled{
+    color:var(--text-faint);
+    cursor:default;
+    font-weight:400;
+  }
+  .resend-row button:focus-visible{ outline:2px solid var(--ice); outline-offset:2px; }
+
+  /* ---------- success screen ---------- */
+  .success-badge-wrap{
+    position:relative;
+    width:150px; height:150px;
+    display:flex; align-items:center; justify-content:center;
+    margin-bottom:22px;
+  }
+  .ring{
+    position:absolute;
+    border-radius:26px;
+    border:1px solid var(--ok);
+    opacity:0;
+  }
+  .ring1{ inset:36px; }
+  .ring2{ inset:18px; }
+  .ring3{ inset:0; }
+  .success-badge-wrap.pop .ring1{ animation:ringOut .9s ease-out .05s forwards; }
+  .success-badge-wrap.pop .ring2{ animation:ringOut .9s ease-out .15s forwards; }
+  .success-badge-wrap.pop .ring3{ animation:ringOut .9s ease-out .25s forwards; }
+  @keyframes ringOut{
+    0%{ opacity:.55; transform:scale(.85); }
+    100%{ opacity:0; transform:scale(1); }
+  }
+
+  .check-box{
+    width:64px; height:64px;
+    border-radius:20px;
+    background:linear-gradient(180deg,#123a2c,#0c2c22);
+    border:1px solid var(--ok);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 0 0 rgba(46,230,168,.4);
+    transform:scale(.6);
+    opacity:0;
+  }
+  .success-badge-wrap.pop .check-box{
+    animation:checkIn .5s cubic-bezier(.34,1.56,.64,1) .1s forwards,
+              checkGlow 2.2s ease-in-out .6s infinite;
+  }
+  @keyframes checkIn{
+    to{ transform:scale(1); opacity:1; }
+  }
+  @keyframes checkGlow{
+    0%,100%{ box-shadow:0 0 0 0 rgba(46,230,168,.35); }
+    50%{ box-shadow:0 0 22px 4px rgba(46,230,168,.35); }
+  }
+  .check-box svg{ width:30px; height:30px; color:var(--ok); }
+
+  .spark{
+    position:absolute;
+    width:4px; height:4px;
+    border-radius:50%;
+    background:var(--ok);
+    opacity:0;
+    top:50%; left:50%;
+  }
+  .success-badge-wrap.pop .spark{ animation:sparkOut 1s ease-out forwards; }
+
+  @keyframes sparkOut{
+    0%{ opacity:0; transform:translate(0,0) scale(0); }
+    15%{ opacity:1; }
+    100%{ opacity:0; transform:translate(var(--sx),var(--sy)) scale(1); }
+  }
+
+  .secure-row{
+    display:flex; align-items:center; gap:6px;
+    font-size:12.5px;
+    color:var(--text-dim);
+    margin:18px 0 22px;
+  }
+  .secure-row svg{ width:13px; height:13px; color:var(--text-faint); }
+
+  .reset-link{
+    background:none; border:none;
+    color:var(--text-faint);
+    font-size:12px;
+    margin-top:14px;
+    cursor:pointer;
+    font-family:inherit;
+    text-decoration:underline;
+    text-underline-offset:2px;
+  }
+  .reset-link:focus-visible{ outline:2px solid var(--ice); outline-offset:2px; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
+  }
+</style>
+<!-- Firebase: lets this page send/verify real SMS OTPs. No install needed, just these two script tags. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+</head>
+<body>
+
+<div class="phone-frame">
+  <div class="card">
+
+    <div class="topbar">
+      <button class="back-btn" id="backBtn" type="button" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        Back
+      </button>
+    </div>
+
+    <!-- ================= SCREEN 1: PHONE NUMBER ================= -->
+    <section class="screen active" id="screenPhone">
+      <div class="icon-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      </div>
+      <h1>Log in with your phone</h1>
+      <p class="subtitle">We'll text a 4-digit code to confirm it's really you. Standard message rates apply.</p>
+
+      <div class="field-group">
+        <label class="field-label" for="phoneInput">Phone number</label>
+        <div class="phone-input-row">
+          <span class="country-code">🇮🇳 +91</span>
+          <input id="phoneInput" type="tel" inputmode="numeric" placeholder="98765 43210" maxlength="11" autocomplete="tel-national">
+        </div>
+        <div class="error-text" id="phoneError"></div>
+      </div>
+
+      <!-- Firebase needs an invisible "are you a robot" check to send real SMS. It's invisible, nothing to click. -->
+      <div id="recaptcha-container"></div>
+
+      <button class="btn-primary" id="sendCodeBtn" type="button">Send code</button>
+      <p class="fine-print">By continuing you agree to receive a one-time verification code by SMS.</p>
+    </section>
+
+    <!-- ================= SCREEN 2: OTP VERIFY ================= -->
+    <section class="screen" id="screenOtp">
+      <h1>Verify your number</h1>
+      <p class="subtitle otp-subtitle">Enter the 6-digit code we sent to <b id="maskedPhone">+91 98765 •••10</b></p>
+
+      <div class="orbit-wrap" id="orbitWrap">
+        <svg class="orbit-svg" viewBox="0 0 220 150">
+          <ellipse class="orbit-path" cx="110" cy="75" rx="62" ry="62"/>
+        </svg>
+        <div class="orbit-hub"></div>
+        <div class="otp-boxes" id="otpBoxes" data-layout="row">
+          <div class="otp-box" style="--slot:0"><input type="tel" inputmode="numeric" maxlength="1" data-idx="0" aria-label="Digit 1"></div>
+          <div class="otp-box" style="--slot:1"><input type="tel" inputmode="numeric" maxlength="1" data-idx="1" aria-label="Digit 2"></div>
+          <div class="otp-box" style="--slot:2"><input type="tel" inputmode="numeric" maxlength="1" data-idx="2" aria-label="Digit 3"></div>
+          <div class="otp-box" style="--slot:3"><input type="tel" inputmode="numeric" maxlength="1" data-idx="3" aria-label="Digit 4"></div>
+          <div class="otp-box" style="--slot:4"><input type="tel" inputmode="numeric" maxlength="1" data-idx="4" aria-label="Digit 5"></div>
+          <div class="otp-box" style="--slot:5"><input type="tel" inputmode="numeric" maxlength="1" data-idx="5" aria-label="Digit 6"></div>
+        </div>
+      </div>
+
+      <div class="verify-status" id="verifyStatus"></div>
+
+      <div class="sms-card" id="smsCard">
+        <div class="sms-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div class="sms-body">
+          <div class="sms-label">Message · OTP</div>
+          <div class="sms-text" id="smsStatusText">Text message sent to your phone.</div>
+        </div>
+      </div>
+
+      <p class="caption">Enter the 6-digit code from the SMS you received.</p>
+
+      <div class="resend-row">
+        <span id="resendText">Didn't receive the code? Resend in <b id="resendCount">30</b>s</span>
+        <button id="resendBtn" type="button" style="display:none;">Resend code</button>
+      </div>
+    </section>
+
+    <!-- ================= SCREEN 3: SUCCESS ================= -->
+    <section class="screen" id="screenSuccess">
+      <div class="success-badge-wrap" id="successBadge">
+        <div class="ring ring1"></div>
+        <div class="ring ring2"></div>
+        <div class="ring ring3"></div>
+        <div class="check-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+      </div>
+      <h1>Verified successfully</h1>
+      <p class="subtitle" style="margin-bottom:0;">Your number has been verified.</p>
+
+      <div class="secure-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Verified and secure
+      </div>
+
+      <button class="btn-primary success" id="continueBtn" type="button">Continue</button>
+      <button class="reset-link" id="resetLink" type="button">Start over</button>
+    </section>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================================
+     PASTE YOUR FIREBASE CONFIG HERE.
+     You get this block from: Firebase console → ⚙️ Project settings →
+     "Your apps" → the web app (</>) you registered. It looks like the
+     example below but with your own real values. Just replace the whole
+     object, don't rename the variable.
+  ========================================================================= */
+  const firebaseConfig = {
+    apiKey: "PASTE_YOUR_API_KEY_HERE",
+    authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
+    projectId: "PASTE_YOUR_PROJECT_ID_HERE",
+    storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
+    messagingSenderId: "PASTE_YOUR_SENDER_ID_HERE",
+    appId: "PASTE_YOUR_APP_ID_HERE"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+
+  // Holds the in-progress phone verification returned by Firebase.
+  let confirmationResult = null;
+
+  /* ---------------- sound engine (synthesized, no audio files, no music) ---------------- */
+  let actx = null;
+  function ctx(){
+    if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state === "suspended") actx.resume();
+    return actx;
+  }
+  function tone(freq, dur, opts){
+    opts = opts || {};
+    const c = ctx();
+    const t0 = c.currentTime + (opts.delay||0);
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    osc.type = opts.type || "sine";
+    osc.frequency.setValueAtTime(freq, t0);
+    if(opts.slideTo){
+      osc.frequency.exponentialRampToValueAtTime(opts.slideTo, t0 + dur);
+    }
+    const peak = opts.gain || 0.07;
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(peak, t0 + Math.min(0.02,dur*0.3));
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain).connect(c.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  }
+  const sounds = {
+    key(idx){ tone(560 + (idx||0)*46, 0.09, {type:"sine", gain:0.06}); },
+    backspace(){ tone(320, 0.07, {type:"sine", gain:0.045}); },
+    send(){ tone(420, 0.22, {type:"sine", slideTo:920, gain:0.06}); },
+    smsArrive(){ tone(880,0.06,{gain:0.05}); tone(1180,0.09,{delay:0.07,gain:0.05}); },
+    fillTick(i){ tone(620 + i*70, 0.09, {type:"triangle", gain:0.06, delay:i*0.09}); },
+    whoosh(){ tone(700,0.3,{type:"sine",slideTo:260,gain:0.05}); },
+    rotateTick(){ tone(500,0.045,{type:"triangle",gain:0.03}); },
+    success(){
+      [523.25,659.25,783.99].forEach((f,i)=> tone(f,0.24,{delay:i*0.11,gain:0.065}));
+    },
+    error(){ tone(220,0.32,{type:"sawtooth",slideTo:110,gain:0.05}); }
+  };
+
+  /* ---------------- state ---------------- */
+  const screens = {
+    phone: document.getElementById("screenPhone"),
+    otp: document.getElementById("screenOtp"),
+    success: document.getElementById("screenSuccess"),
+  };
+  const backBtn = document.getElementById("backBtn");
+
+  let resendTimer = null;
+  let resendLeft = 30;
+  let verifying = false;
+
+  function showScreen(name){
+    Object.values(screens).forEach(s=>s.classList.remove("active"));
+    screens[name].classList.add("active");
+    backBtn.classList.toggle("show", name === "otp");
+  }
+
+  /* ---------------- screen 1: phone ---------------- */
+  const phoneInput = document.getElementById("phoneInput");
+  const phoneError = document.getElementById("phoneError");
+  const sendCodeBtn = document.getElementById("sendCodeBtn");
+  const maskedPhone = document.getElementById("maskedPhone");
+
+  phoneInput.addEventListener("input", ()=>{
+    let digits = phoneInput.value.replace(/\D/g,"").slice(0,10);
+    let out = digits;
+    if(digits.length > 5) out = `${digits.slice(0,5)} ${digits.slice(5)}`;
+    phoneInput.value = out;
+    phoneError.textContent = "";
+  });
+
+  // Invisible "prove you're not a robot" check Firebase needs before it will send an SMS.
+  // It never shows a visible box unless Google gets suspicious.
+  let recaptchaVerifier = new firebase.auth.RecaptchaVerifier("recaptcha-container", {
+    size: "invisible"
+  });
+
+  sendCodeBtn.addEventListener("click", ()=>{
+    const digits = phoneInput.value.replace(/\D/g,"");
+    if(digits.length !== 10){
+      phoneError.textContent = "Enter a valid 10-digit phone number.";
+      tone(220,0.18,{type:"sawtooth",gain:0.04});
+      phoneInput.focus();
+      return;
+    }
+    const fullNumber = "+91" + digits;
+    sendCodeBtn.disabled = true;
+    sendCodeBtn.textContent = "Sending…";
+
+    auth.signInWithPhoneNumber(fullNumber, recaptchaVerifier)
+      .then((result)=>{
+        confirmationResult = result;
+        sendCodeBtn.disabled = false;
+        sendCodeBtn.textContent = "Send code";
+        sounds.send();
+        maskedPhone.textContent = `+91 ${digits.slice(0,5)} •••${digits.slice(8)}`;
+        startOtpFlow();
+      })
+      .catch((err)=>{
+        console.error(err);
+        sendCodeBtn.disabled = false;
+        sendCodeBtn.textContent = "Send code";
+        phoneError.textContent = "Couldn't send the code. " + (err.message || "Try again.");
+        tone(220,0.18,{type:"sawtooth",gain:0.04});
+        // reset the invisible captcha so the next attempt gets a fresh token
+        recaptchaVerifier.render().then((widgetId)=>{
+          if(window.grecaptcha) window.grecaptcha.reset(widgetId);
+        });
+      });
+  });
+
+  /* ---------------- screen 2: otp ---------------- */
+  const otpBoxesWrap = document.getElementById("otpBoxes");
+  const boxes = Array.from(otpBoxesWrap.querySelectorAll(".otp-box"));
+  const inputs = Array.from(otpBoxesWrap.querySelectorAll("input"));
+  const orbitWrap = document.getElementById("orbitWrap");
+  const smsCard = document.getElementById("smsCard");
+  const smsStatusText = document.getElementById("smsStatusText");
+  const verifyStatus = document.getElementById("verifyStatus");
+  const resendText = document.getElementById("resendText");
+  const resendCount = document.getElementById("resendCount");
+  const resendBtn = document.getElementById("resendBtn");
+
+  function startOtpFlow(){
+    inputs.forEach(i=>{ i.value=""; });
+    boxes.forEach(b=> b.classList.remove("filled","ok","bad"));
+    otpBoxesWrap.dataset.layout = "row";
+    orbitWrap.classList.remove("spinning");
+    verifyStatus.textContent = "";
+    verifyStatus.className = "verify-status";
+    smsStatusText.textContent = "Text message sent to your phone.";
+    smsCard.classList.remove("show");
+    verifying = false;
+    showScreen("otp");
+    setTimeout(()=> inputs[0].focus(), 350);
+
+    // the real SMS is already on its way over the phone network by now
+    setTimeout(()=>{
+      smsCard.classList.add("show");
+      sounds.smsArrive();
+    }, 600);
+
+    startResendTimer();
+  }
+
+  function startResendTimer(){
+    clearInterval(resendTimer);
+    resendLeft = 30;
+    resendText.style.display = "inline";
+    resendBtn.style.display = "none";
+    resendCount.textContent = resendLeft;
+    resendTimer = setInterval(()=>{
+      resendLeft--;
+      resendCount.textContent = resendLeft;
+      if(resendLeft <= 0){
+        clearInterval(resendTimer);
+        resendText.style.display = "none";
+        resendBtn.style.display = "inline";
+        resendBtn.disabled = false;
+      }
+    }, 1000);
+  }
+
+  resendBtn.addEventListener("click", ()=>{
+    const digits = phoneInput.value.replace(/\D/g,"");
+    const fullNumber = "+91" + digits;
+    resendBtn.disabled = true;
+    auth.signInWithPhoneNumber(fullNumber, recaptchaVerifier)
+      .then((result)=>{
+        confirmationResult = result;
+        sounds.send();
+        smsCard.classList.remove("show");
+        setTimeout(()=>{ smsCard.classList.add("show"); sounds.smsArrive(); }, 900);
+        startResendTimer();
+      })
+      .catch((err)=>{
+        console.error(err);
+        resendBtn.disabled = false;
+        verifyStatus.textContent = "Couldn't resend. Try again in a moment.";
+        verifyStatus.classList.add("bad");
+      });
+  });
+
+  inputs.forEach((inp, idx)=>{
+    inp.addEventListener("focus", ()=>{
+      boxes[idx].classList.add("focus-ring");
+    });
+    inp.addEventListener("blur", ()=>{
+      boxes[idx].classList.remove("focus-ring");
+    });
+    inp.addEventListener("keydown", (e)=>{
+      if(e.key === "Backspace" && !inp.value && idx > 0){
+        inputs[idx-1].focus();
+        inputs[idx-1].value = "";
+        boxes[idx-1].classList.remove("filled");
+        sounds.backspace();
+      }
+    });
+    inp.addEventListener("input", ()=>{
+      inp.value = inp.value.replace(/\D/g,"").slice(0,1);
+      if(inp.value){
+        boxes[idx].classList.add("filled");
+        sounds.key(idx);
+        if(idx < inputs.length-1) inputs[idx+1].focus();
+        else inp.blur();
+      } else {
+        boxes[idx].classList.remove("filled");
+      }
+      checkComplete();
+    });
+    inp.addEventListener("paste", (e)=>{
+      const text = (e.clipboardData||window.clipboardData).getData("text").replace(/\D/g,"");
+      if(text.length >= 6){
+        e.preventDefault();
+        text.slice(0,6).split("").forEach((ch,i)=>{
+          inputs[i].value = ch;
+          boxes[i].classList.add("filled");
+        });
+        sounds.key(5);
+        inputs[5].blur();
+        checkComplete();
+      }
+    });
+  });
+
+  function currentValue(){
+    return inputs.map(i=>i.value).join("");
+  }
+
+  function checkComplete(){
+    if(currentValue().length === 6 && !verifying){
+      verifying = true;
+      inputs.forEach(i=> i.blur());
+      runVerifyAnimation();
+    }
+  }
+
+  function runVerifyAnimation(){
+    sounds.whoosh();
+    verifyStatus.textContent = "Verifying…";
+    otpBoxesWrap.dataset.layout = "orbit";
+    orbitWrap.classList.add("spinning");
+
+    // rotate the digits' positions around the ring, like a wheel settling
+    let step = 0;
+    const totalSteps = 5;
+    const stepDur = 260;
+    const spin = setInterval(()=>{
+      step++;
+      boxes.forEach(b=>{
+        let slot = parseInt(b.style.getPropertyValue("--slot"),10);
+        b.style.setProperty("--slot", (slot+1) % 6);
+      });
+      sounds.rotateTick();
+      if(step >= totalSteps){
+        clearInterval(spin);
+        finishVerify();
+      }
+    }, stepDur);
+  }
+
+  function finishVerify(){
+    // Ask Firebase whether this is the real code it texted to the phone.
+    confirmationResult.confirm(currentValue())
+      .then(()=>{
+        boxes.forEach(b=> b.classList.add("ok"));
+        verifyStatus.textContent = "Verified";
+        verifyStatus.classList.add("ok");
+        sounds.success();
+        setTimeout(()=>{
+          showScreen("success");
+          triggerSuccessAnim();
+        }, 850);
+      })
+      .catch((err)=>{
+        console.error(err);
+        boxes.forEach(b=> b.classList.add("bad"));
+        verifyStatus.textContent = "That code didn't match. Try again.";
+        verifyStatus.classList.add("bad");
+        sounds.error();
+        otpBoxesWrap.classList.add("shake");
+        setTimeout(()=>{
+          otpBoxesWrap.classList.remove("shake");
+          boxes.forEach((b,i)=>{
+            b.classList.remove("ok","bad","filled");
+            b.style.setProperty("--slot", i);
+          });
+          inputs.forEach(i=> i.value="");
+          otpBoxesWrap.dataset.layout = "row";
+          orbitWrap.classList.remove("spinning");
+          verifyStatus.textContent = "";
+          verifyStatus.className = "verify-status";
+          verifying = false;
+          inputs[0].focus();
+        }, 1300);
+      });
+  }
+
+  /* ---------------- screen 3: success ---------------- */
+  const successBadge = document.getElementById("successBadge");
+  const continueBtn = document.getElementById("continueBtn");
+  const resetLink = document.getElementById("resetLink");
+
+  function triggerSuccessAnim(){
+    // build sparks once
+    if(!successBadge.dataset.built){
+      for(let i=0;i<10;i++){
+        const s = document.createElement("div");
+        s.className = "spark";
+        const angle = (Math.PI*2/10)*i;
+        const dist = 55 + Math.random()*20;
+        s.style.setProperty("--sx", Math.cos(angle)*dist + "px");
+        s.style.setProperty("--sy", Math.sin(angle)*dist + "px");
+        successBadge.appendChild(s);
+      }
+      successBadge.dataset.built = "1";
+    }
+    successBadge.classList.remove("pop");
+    void successBadge.offsetWidth;
+    successBadge.classList.add("pop");
+  }
+
+  continueBtn.addEventListener("click", ()=>{
+    tone(700,0.1,{gain:0.05});
+    continueBtn.textContent = "You're in ✓";
+    continueBtn.disabled = true;
+  });
+
+  resetLink.addEventListener("click", ()=>{
+    clearInterval(resendTimer);
+    phoneInput.value = "";
+    continueBtn.textContent = "Continue";
+    continueBtn.disabled = false;
+    showScreen("phone");
+  });
+
+  backBtn.addEventListener("click", ()=>{
+    clearInterval(resendTimer);
+    showScreen("phone");
+  });
+
+})();
+</script>
+</body>
+</html>
